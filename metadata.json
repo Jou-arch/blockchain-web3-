@@ -1,0 +1,6 @@
+{
+  "name": "ReceiptSplit",
+  "description": "Snap a receipt, let AI settle the crypto bill with zero friction using Account Abstraction on BNB Chain.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

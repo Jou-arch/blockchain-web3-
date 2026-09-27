@@ -1,0 +1,163 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAdmin() {
+      return isVerified() && request.auth.token.email == 'Taufik17gambatte22@gmail.com';
+    }
+
+    // Public user profile validation
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['displayName', 'updatedAt']) &&
+             data.keys().hasOnly(['displayName', 'photoURL', 'updatedAt']) &&
+             data.displayName is string &&
+             data.displayName.size() > 0 &&
+             data.displayName.size() <= 100 &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500)) &&
+             data.updatedAt is timestamp;
+    }
+
+    // Private user data validation
+    function isValidUserPrivate(data) {
+      return data.keys().hasAll(['email', 'createdAt']) &&
+             data.keys().hasOnly(['email', 'createdAt']) &&
+             data.email is string &&
+             data.email.size() > 0 &&
+             data.email.size() <= 200 &&
+             data.createdAt is timestamp;
+    }
+
+    // Receipt entity validation
+    function isValidReceipt(data) {
+      return data.keys().hasAll([
+        'id', 'ownerId', 'title', 'merchantName', 'currency',
+        'exchangeRate', 'subtotal', 'grandTotal', 'payerAddress',
+        'items', 'participants', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'ownerId', 'title', 'merchantName', 'date', 'currency',
+        'exchangeRate', 'subtotal', 'tax', 'serviceCharge', 'discount',
+        'grandTotal', 'payerName', 'payerAddress', 'network',
+        'items', 'participants', 'createdAt', 'updatedAt'
+      ]) &&
+      data.id is string && isValidId(data.id) &&
+      data.ownerId == request.auth.uid &&
+      data.title is string && data.title.size() <= 120 &&
+      data.merchantName is string && data.merchantName.size() <= 120 &&
+      (!('date' in data) || (data.date is string && data.date.size() <= 30)) &&
+      data.currency is string && data.currency.size() <= 10 &&
+      data.exchangeRate is number && data.exchangeRate > 0 &&
+      data.subtotal is number && data.subtotal >= 0 &&
+      (!('tax' in data) || (data.tax is number && data.tax >= 0)) &&
+      (!('serviceCharge' in data) || (data.serviceCharge is number && data.serviceCharge >= 0)) &&
+      (!('discount' in data) || (data.discount is number && data.discount >= 0)) &&
+      data.grandTotal is number && data.grandTotal >= 0 &&
+      (!('payerName' in data) || (data.payerName is string && data.payerName.size() <= 100)) &&
+      data.payerAddress is string && data.payerAddress.size() <= 66 &&
+      (!('network' in data) || (data.network is string && data.network.size() <= 50)) &&
+      data.items is list && data.items.size() <= 50 &&
+      data.participants is list && data.participants.size() <= 30 &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // Connection test document
+    match /test/{docId} {
+      allow read: if isSignedIn();
+    }
+
+    // User Public Profile
+    match /users/{userId}/public/profile {
+      allow get: if isSignedIn() && isValidId(userId);
+      allow create: if isVerified() && isValidId(userId) && request.auth.uid == userId &&
+                       isValidUserProfile(incoming()) && incoming().updatedAt == request.time;
+      allow update: if isVerified() && isValidId(userId) && (request.auth.uid == userId || isAdmin()) &&
+                       isValidUserProfile(incoming()) && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // User Private PII
+    match /users/{userId}/private/info {
+      allow get: if isVerified() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow create: if isVerified() && isValidId(userId) && request.auth.uid == userId &&
+                       isValidUserPrivate(incoming()) && incoming().createdAt == request.time;
+      allow update: if isVerified() && isValidId(userId) && (request.auth.uid == userId || isAdmin()) &&
+                       isValidUserPrivate(incoming()) && incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+    }
+
+    // Receipts collection
+    match /receipts/{receiptId} {
+      // Individual get for receipt owner or invited viewer
+      allow get: if isSignedIn() && isValidId(receiptId);
+
+      // List query MUST be restricted to own receipts
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+
+      // Creation by verified authenticated owner with strict schema and timestamp
+      allow create: if isVerified() && isValidId(receiptId) &&
+                       incoming().id == receiptId &&
+                       incoming().ownerId == request.auth.uid &&
+                       isValidReceipt(incoming()) &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time;
+
+      // Update actions:
+      // Action 1: Owner full edit (re-assigning items, recalculating shares, modifying items)
+      // Action 2: Settlement state update (e.g. participant paying via AA or QR)
+      allow update: if isVerified() && isValidId(receiptId) &&
+                       isValidReceipt(incoming()) &&
+                       incoming().ownerId == existing().ownerId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt == request.time &&
+                       (
+                         isAdmin() ||
+                         // Action 1: Owner general edits
+                         (
+                           existing().ownerId == request.auth.uid &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'title', 'merchantName', 'date', 'currency', 'exchangeRate',
+                             'subtotal', 'tax', 'serviceCharge', 'discount', 'grandTotal',
+                             'payerName', 'payerAddress', 'network', 'items', 'participants', 'updatedAt'
+                           ])
+                         ) ||
+                         // Action 2: Settlement state progression
+                         (
+                           incoming().subtotal == existing().subtotal &&
+                           incoming().grandTotal == existing().grandTotal &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['participants', 'updatedAt'])
+                         )
+                       );
+
+      // Delete by owner only
+      allow delete: if isVerified() && isValidId(receiptId) &&
+                       (existing().ownerId == request.auth.uid || isAdmin());
+    }
+  }
+}

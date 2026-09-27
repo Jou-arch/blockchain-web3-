@@ -1,0 +1,171 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Public profile information of a registered user",
+      "type": "object",
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the user",
+          "maxLength": 100
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Avatar URL of the user",
+          "maxLength": 500
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update"
+        }
+      },
+      "required": ["displayName", "updatedAt"]
+    },
+    "UserPrivate": {
+      "title": "UserPrivate",
+      "description": "Private sensitive information of a user",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Email address of the user",
+          "maxLength": 200
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when user registered"
+        }
+      },
+      "required": ["email", "createdAt"]
+    },
+    "Receipt": {
+      "title": "Receipt",
+      "description": "Receipt bill document containing parsed items, participants, and settlement states",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the receipt",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the bill creator/host",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Bill title or description",
+          "maxLength": 120
+        },
+        "merchantName": {
+          "type": "string",
+          "description": "Name of the merchant or restaurant",
+          "maxLength": 120
+        },
+        "date": {
+          "type": "string",
+          "description": "Date of transaction as shown on receipt",
+          "maxLength": 30
+        },
+        "currency": {
+          "type": "string",
+          "description": "Currency code such as IDR or USD",
+          "maxLength": 10
+        },
+        "exchangeRate": {
+          "type": "number",
+          "description": "Exchange rate to USDT"
+        },
+        "subtotal": {
+          "type": "number",
+          "description": "Sum of all item prices in local currency"
+        },
+        "tax": {
+          "type": "number",
+          "description": "Tax amount in local currency"
+        },
+        "serviceCharge": {
+          "type": "number",
+          "description": "Service charge amount in local currency"
+        },
+        "discount": {
+          "type": "number",
+          "description": "Discount amount in local currency"
+        },
+        "grandTotal": {
+          "type": "number",
+          "description": "Final total bill in local currency"
+        },
+        "payerName": {
+          "type": "string",
+          "description": "Name of the host who paid cashier",
+          "maxLength": 100
+        },
+        "payerAddress": {
+          "type": "string",
+          "description": "Host BNB Chain recipient address",
+          "maxLength": 66
+        },
+        "network": {
+          "type": "string",
+          "description": "Target blockchain network",
+          "maxLength": 50
+        },
+        "items": {
+          "type": "array",
+          "description": "List of receipt line items"
+        },
+        "participants": {
+          "type": "array",
+          "description": "List of participants and their calculated shares"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when receipt was saved"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update or settlement change"
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "title",
+        "merchantName",
+        "currency",
+        "exchangeRate",
+        "subtotal",
+        "grandTotal",
+        "payerAddress",
+        "items",
+        "participants",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/public/profile": {
+      "schema": "UserProfile",
+      "description": "Public profile details of a user"
+    },
+    "/users/{userId}/private/info": {
+      "schema": "UserPrivate",
+      "description": "Private PII data of a user"
+    },
+    "/receipts/{receiptId}": {
+      "schema": "Receipt",
+      "description": "Receipts created and saved by authenticated users"
+    }
+  }
+}
